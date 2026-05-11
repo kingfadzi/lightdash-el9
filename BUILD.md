@@ -6,6 +6,13 @@ Lab cuts a release tarball; on-prem rebuilds the runtime image against the
 blessed RHEL UBI 9 + Node 20 base, pulling the same tarball from the GitHub
 release.
 
+> **Pinned to Lightdash `0.2540.0` + Node `20`.**
+> Upstream uses Node 20.x. Newer Lightdash versions (≥ 0.2550) bundle
+> duckdb 1.x which requires `GLIBCXX_3.4.30`+; EL9 ships glibc 2.34 with
+> `GLIBCXX_3.4.29` so they will not boot. Node 22 also breaks the bundled
+> `lz4` native bindings. Do not change either knob without re-running the
+> smoke test.
+
 ## Prereqs
 
 **Lab** (this repo's working tree, AlmaLinux 9 + Node 20 + internet):
@@ -23,17 +30,17 @@ release.
 
 ```bash
 cd <this repo>
-LIGHTDASH_VERSION=0.2904.0 ./build/build-release.sh
+LIGHTDASH_VERSION=0.2540.0 ./build/build-release.sh
 ```
 
 Takes ~5–10 min. Produces:
-- GH release `lightdash-0.2904.0-el9` on `kingfadzi/lightdash-el9` with `lightdash-runtime-*.tar.gz`, `SHA256SUMS` — **this is what on-prem consumes**.
-- Image `docker.butterflycluster.com/lightdash/lightdash:0.2904.0-el9` pushed to your registry — lab convenience only (AlmaLinux 9 base; not for on-prem).
+- GH release `lightdash-0.2540.0-el9` on `kingfadzi/lightdash-el9` with `lightdash-runtime-*.tar.gz`, `SHA256SUMS` — **this is what on-prem consumes**.
+- Image `docker.butterflycluster.com/lightdash/lightdash:0.2540.0-el9` pushed to your registry — lab convenience only (AlmaLinux 9 base; not for on-prem).
 
 Useful flags:
 ```bash
-SKIP_PUSH=1     LIGHTDASH_VERSION=0.2904.0 ./build/build-release.sh   # build, no registry push
-SKIP_RELEASE=1  LIGHTDASH_VERSION=0.2904.0 ./build/build-release.sh   # build, no GH upload
+SKIP_PUSH=1     LIGHTDASH_VERSION=0.2540.0 ./build/build-release.sh   # build, no registry push
+SKIP_RELEASE=1  LIGHTDASH_VERSION=0.2540.0 ./build/build-release.sh   # build, no GH upload
 ```
 
 ## On-prem — first-time setup
@@ -48,7 +55,7 @@ $EDITOR .env
 Edit `.env`:
 ```ini
 RUNTIME_BASE_IMAGE=registry.onprem.example.com/builder-images/rhel9-node:20
-LIGHTDASH_VERSION=0.2904.0
+LIGHTDASH_VERSION=0.2540.0
 RELEASE_BASE_URL=https://github.com/kingfadzi/lightdash-el9/releases/download
 
 SITE_URL=https://lightdash.onprem.example.com
@@ -94,14 +101,19 @@ Open the playground at the configured `SITE_URL`.
 
 ## Bump lightdash version
 
+**Read the pin note at the top first.** `0.2540.0` is the highest version
+that boots on EL9 today. Bumping past it requires either a newer libstdc++
+on EL9 (not currently available) or a libstdc++ shim baked into the runtime
+image. Smoke-test any candidate version against EL9 + Node 20 before pinning.
+
 Lab:
 ```bash
-LIGHTDASH_VERSION=0.2905.0 ./build/build-release.sh
+LIGHTDASH_VERSION=<new-version> ./build/build-release.sh
 ```
 
 On-prem:
 ```bash
-sed -i 's/^LIGHTDASH_VERSION=.*/LIGHTDASH_VERSION=0.2905.0/' .env
+sed -i "s/^LIGHTDASH_VERSION=.*/LIGHTDASH_VERSION=<new-version>/" .env
 docker compose build lightdash && docker compose up -d lightdash
 ```
 
