@@ -1,8 +1,10 @@
 # Slim on-prem runtime image for Lightdash.
 #
 # Pulls a prebuilt /usr/app tree (from the lab) plus the upstream
-# prod-entrypoint.sh and dumb-init binary, lands them on a RHEL UBI 9 +
-# Node 20 base, and runs Lightdash exactly the way the upstream image does.
+# prod-entrypoint.sh and dumb-init binary, lands them on bare EL9
+# (almalinux:9 in lab, ubi9/ubi on-prem), and runs Lightdash exactly the
+# way the upstream image does. Node 20 is installed below from the EL9
+# AppStream module — base does NOT need Node preinstalled.
 
 ARG RUNTIME_BASE_IMAGE
 FROM ${RUNTIME_BASE_IMAGE}
@@ -32,9 +34,17 @@ ENV HTTP_PROXY=$HTTP_PROXY \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-RUN dnf -y install --allowerasing --setopt=install_weak_deps=False \
+# Node 20 + npm from EL9 AppStream + runtime libs. Pinning nodejs:20 keeps
+# us on the same major as the upstream lightdash/lightdash image (Node 20.x).
+# Node 22 breaks the bundled lz4 native bindings — do not bump.
+# EL9 strips corepack from the nodejs package, so pnpm is installed via npm
+# below instead of `corepack enable`.
+RUN dnf -y module enable nodejs:20 \
+ && dnf -y install --allowerasing --setopt=install_weak_deps=False \
+      nodejs npm \
       ca-certificates openssl-libs tzdata curl tar gzip \
- && dnf clean all
+ && dnf clean all \
+ && node --version && npm --version
 
 # Optional corporate CA bundle (defaults to copying this Dockerfile — no-op).
 COPY ${CORP_CA_BUNDLE} /tmp/corp-ca.pem
@@ -44,10 +54,10 @@ RUN if grep -q 'BEGIN CERTIFICATE' /tmp/corp-ca.pem 2>/dev/null; then \
     fi
 ENV NODE_EXTRA_CA_CERTS=/etc/pki/tls/certs/ca-bundle.crt
 
-# Activate pnpm via corepack (ships with Node 20+). Used by prod-entrypoint.sh
-# to run `pnpm -F backend migrate-production` at startup.
-RUN corepack enable \
- && corepack prepare pnpm@${PNPM_VERSION} --activate
+# Install pnpm via npm (EL9 nodejs package omits corepack). Used by
+# prod-entrypoint.sh to run `pnpm -F backend migrate-production` at startup.
+RUN npm install -g pnpm@${PNPM_VERSION} \
+ && pnpm --version
 
 # Pull the runtime tarball + checksums, sha-verify, extract.
 # Tarball content is rooted at "/", so paths land at /usr/app, /usr/bin/...

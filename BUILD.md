@@ -2,9 +2,10 @@
 
 Prebuilt Lightdash for AlmaLinux 9 / RHEL 9.
 
-Lab cuts a release tarball; on-prem rebuilds the runtime image against the
-blessed RHEL UBI 9 + Node 20 base, pulling the same tarball from the GitHub
-release.
+Lab cuts a release tarball; on-prem rebuilds the runtime image against a
+**bare RHEL UBI 9** image, pulling the same tarball from the GitHub release.
+`Dockerfile.runtime` installs Node 20 itself from the EL9 AppStream module —
+the base image does NOT need Node preinstalled.
 
 > **Pinned to Lightdash `0.2540.0` + Node `20`.**
 > Upstream uses Node 20.x. Newer Lightdash versions (≥ 0.2550) bundle
@@ -15,15 +16,17 @@ release.
 
 ## Prereqs
 
-**Lab** (this repo's working tree, AlmaLinux 9 + Node 20 + internet):
+**Lab** (this repo's working tree, AlmaLinux 9 + internet):
 - `docker`, `pigz`, `gh` (`dnf -y install gh` if missing)
 - `GITHUB_API_TOKEN` (or `GH_TOKEN`) with `repo` scope
 - `docker login docker.butterflycluster.com`
 
 **On-prem** (RHEL 9):
 - `docker compose`
-- Reachability to GitHub releases (the runtime image is built locally against the blessed RHEL UBI 9 base — the lab's AlmaLinux-based image is **not** consumed on-prem)
-- Pull access to your on-prem registry for the RHEL UBI 9 + Node 20 base image
+- Reachability to GitHub releases (the runtime image is built locally)
+- Pull access to a bare **RHEL UBI 9** image in your on-prem registry
+  (e.g. `registry.onprem.example.com/ubi9/ubi:latest`) — Node 20 is
+  installed during build from the EL9 AppStream module
 - A Postgres reachable from the docker host for Lightdash's metadata DB
 
 ## Lab — cut a release
@@ -54,7 +57,7 @@ $EDITOR .env
 
 Edit `.env`:
 ```ini
-RUNTIME_BASE_IMAGE=registry.onprem.example.com/builder-images/rhel9-node:20
+RUNTIME_BASE_IMAGE=registry.onprem.example.com/ubi9/ubi:latest
 LIGHTDASH_VERSION=0.2540.0
 RELEASE_BASE_URL=https://github.com/kingfadzi/lightdash-el9/releases/download
 
@@ -78,9 +81,10 @@ psql -h db.onprem.internal -U postgres -c "CREATE DATABASE lightdash;"
 
 ## On-prem — start lightdash
 
-Build the runtime image against the blessed RHEL UBI 9 base (curls the
-release tarball from GitHub, sha-verifies, extracts to `/usr/app`,
-`/usr/bin/prod-entrypoint.sh`, `/usr/bin/dumb-init`), then bring it up:
+Build the runtime image against bare RHEL UBI 9 (installs Node 20 from EL9
+AppStream, curls the release tarball from GitHub, sha-verifies, extracts to
+`/usr/app`, `/usr/bin/prod-entrypoint.sh`, `/usr/bin/dumb-init`), then
+bring it up:
 ```bash
 docker compose build lightdash
 docker compose up -d lightdash
@@ -125,14 +129,14 @@ docker compose build lightdash && docker compose up -d lightdash
 | `pull access denied for local/lightdash` warning | Cosmetic. `docker compose up` tries pull before falling back to build. Run `docker compose build lightdash` first to silence it. |
 | `Repository is empty` from `gh release create` | Script auto-seeds with a README if `AUTO_INIT_REPO=1` (default). Re-run. |
 | Runtime image build hits HTTP 404 on tarball | Release didn't publish — check `gh release view lightdash-${LIGHTDASH_VERSION}-el9 --repo kingfadzi/lightdash-el9`. |
-| `pnpm: command not found` at startup | `corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate` failed at image-build time. Most likely your RHEL UBI 9 + Node 20 base lacks corepack — pin a base that has Node 20.x with corepack, or `npm i -g pnpm@${PNPM_VERSION}` instead. |
+| `pnpm: command not found` at startup | `npm install -g pnpm@${PNPM_VERSION}` failed at image-build time. Check that the build had network access to npmjs.org (or set `HTTPS_PROXY` build-arg). |
 
 ## File map
 
 | Path | Used by | Notes |
 |---|---|---|
 | `Dockerfile` | lab | Passthrough from `lightdash/lightdash:${LIGHTDASH_VERSION}` — exposes the upstream image for `build-release.sh` to extract. |
-| `Dockerfile.runtime` | lab + on-prem | EL9 base + dnf runtime libs + corepack pnpm + curl tarball from GH release + sha-verify. |
+| `Dockerfile.runtime` | lab + on-prem | bare EL9 base + dnf install nodejs:20 + npm-install pnpm + curl tarball from GH release + sha-verify. |
 | `build/build-release.sh` | lab | Orchestrates build → GH release → registry push. |
 | `docker-compose.yml` | lab + on-prem | Service definition. |
 | `.env.example` | each environment | Template; `.env` is per-environment and not committed. |
