@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-#
 # LAB-ONLY: extract the prebuilt Lightdash app from lightdash/lightdash:${VERSION}.
 #
 # Invoked exclusively by build/build-release.sh in the lab. The script does
