@@ -60,6 +60,8 @@ Edit `.env`:
 RUNTIME_BASE_IMAGE=registry.onprem.example.com/ubi9/ubi:latest
 LIGHTDASH_VERSION=0.2540.0
 RELEASE_BASE_URL=https://github.com/kingfadzi/lightdash-el9/releases/download
+# Internal Nexus pull-through for npm. Avoids hitting public registry.npmjs.org.
+NPM_REGISTRY=https://nexus.onprem.example.com/repository/npm-public/
 
 SITE_URL=https://lightdash.onprem.example.com
 PORT=8080

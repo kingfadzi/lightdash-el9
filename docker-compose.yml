@@ -7,6 +7,7 @@ services:
         RUNTIME_BASE_IMAGE: ${RUNTIME_BASE_IMAGE:?RUNTIME_BASE_IMAGE is required in .env}
         LIGHTDASH_VERSION: ${LIGHTDASH_VERSION:?LIGHTDASH_VERSION is required in .env}
         RELEASE_BASE_URL: ${RELEASE_BASE_URL:-https://github.com/kingfadzi/lightdash-el9/releases/download}
+        NPM_REGISTRY: ${NPM_REGISTRY-}
         HTTP_PROXY: ${HTTP_PROXY-}
         HTTPS_PROXY: ${HTTPS_PROXY-}
         NO_PROXY: ${NO_PROXY-}

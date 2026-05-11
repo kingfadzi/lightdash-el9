@@ -15,8 +15,12 @@ ARG RELEASE_BASE_URL=https://github.com/kingfadzi/lightdash-el9/releases/downloa
 # build-release.sh both pins the asset content and busts BuildKit's cache
 # when the tarball changes under an unchanged URL.
 ARG RUNTIME_TARBALL_SHA256=
-# pnpm version to activate via corepack (matches what upstream image uses).
+# pnpm version installed via npm (matches what upstream image uses).
 ARG PNPM_VERSION=10.33.0
+# Optional npm registry override. Lab leaves blank (uses registry.npmjs.org).
+# On-prem: point at your internal Nexus/Artifactory mirror so the build does
+# not depend on public npm. Pull-through proxies work transparently.
+ARG NPM_REGISTRY=
 ARG HTTP_PROXY=
 ARG HTTPS_PROXY=
 ARG NO_PROXY=
@@ -56,7 +60,13 @@ ENV NODE_EXTRA_CA_CERTS=/etc/pki/tls/certs/ca-bundle.crt
 
 # Install pnpm via npm (EL9 nodejs package omits corepack). Used by
 # prod-entrypoint.sh to run `pnpm -F backend migrate-production` at startup.
-RUN npm install -g pnpm@${PNPM_VERSION} \
+# If NPM_REGISTRY is set (on-prem Nexus mirror), point npm at it for this
+# install only — keeps builds off the public npm registry.
+RUN if [ -n "${NPM_REGISTRY}" ]; then \
+      echo "Using npm registry: ${NPM_REGISTRY}"; \
+      npm config set registry "${NPM_REGISTRY}"; \
+    fi \
+ && npm install -g pnpm@${PNPM_VERSION} \
  && pnpm --version
 
 # Pull the runtime tarball + checksums, sha-verify, extract.
