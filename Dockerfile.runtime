@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1.7
+#
+# Slim on-prem runtime image for Lightdash.
+#
+# Pulls a prebuilt /usr/app tree (from the lab) plus the upstream
+# prod-entrypoint.sh and dumb-init binary, lands them on a RHEL UBI 9 +
+# Node 20 base, and runs Lightdash exactly the way the upstream image does.
+
+ARG RUNTIME_BASE_IMAGE
+FROM ${RUNTIME_BASE_IMAGE}
+
+ARG LIGHTDASH_VERSION
+ARG RELEASE_BASE_URL=https://github.com/kingfadzi/lightdash-el9/releases/download
+# Sha256 of the runtime tarball. Optional but recommended: passing it from
+# build-release.sh both pins the asset content and busts BuildKit's cache
+# when the tarball changes under an unchanged URL.
+ARG RUNTIME_TARBALL_SHA256=
+# pnpm version to activate via corepack (matches what upstream image uses).
+ARG PNPM_VERSION=10.33.0
+ARG HTTP_PROXY=
+ARG HTTPS_PROXY=
+ARG NO_PROXY=
+ARG CORP_CA_BUNDLE=Dockerfile.runtime
+
+ENV HTTP_PROXY=$HTTP_PROXY \
+    HTTPS_PROXY=$HTTPS_PROXY \
+    NO_PROXY=$NO_PROXY \
+    http_proxy=$HTTP_PROXY \
+    https_proxy=$HTTPS_PROXY \
+    no_proxy=$NO_PROXY \
+    NODE_ENV=production \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+RUN dnf -y install --allowerasing --setopt=install_weak_deps=False \
+      ca-certificates openssl-libs tzdata curl tar gzip \
+ && dnf clean all
+
+# Optional corporate CA bundle (defaults to copying this Dockerfile — no-op).
+COPY ${CORP_CA_BUNDLE} /tmp/corp-ca.pem
+RUN if grep -q 'BEGIN CERTIFICATE' /tmp/corp-ca.pem 2>/dev/null; then \
+      cp /tmp/corp-ca.pem /etc/pki/ca-trust/source/anchors/corp-ca.pem && \
+      update-ca-trust; \
+    fi
+ENV NODE_EXTRA_CA_CERTS=/etc/pki/tls/certs/ca-bundle.crt
+
+# Activate pnpm via corepack (ships with Node 20+). Used by prod-entrypoint.sh
+# to run `pnpm -F backend migrate-production` at startup.
+RUN corepack enable \
+ && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+# Pull the runtime tarball + checksums, sha-verify, extract.
+# Tarball content is rooted at "/", so paths land at /usr/app, /usr/bin/...
+RUN set -eux; \
+    : "${LIGHTDASH_VERSION:?LIGHTDASH_VERSION build-arg required}"; \
+    TAG="lightdash-${LIGHTDASH_VERSION}-el9"; \
+    TAR="lightdash-runtime-${LIGHTDASH_VERSION}-el9.tar.gz"; \
+    BASE="${RELEASE_BASE_URL}/${TAG}"; \
+    echo "Expected sha256: ${RUNTIME_TARBALL_SHA256:-<unset, falling back to release SHA256SUMS>}"; \
+    curl -fsSL "${BASE}/${TAR}" -o /tmp/${TAR}; \
+    if [ -n "${RUNTIME_TARBALL_SHA256}" ]; then \
+      echo "${RUNTIME_TARBALL_SHA256}  /tmp/${TAR}" | sha256sum -c -; \
+    else \
+      curl -fsSL "${BASE}/SHA256SUMS" -o /tmp/SHA256SUMS; \
+      ( cd /tmp && grep " ${TAR}\$" SHA256SUMS | sha256sum -c - ); \
+      rm -f /tmp/SHA256SUMS; \
+    fi; \
+    tar -xzf /tmp/${TAR} -C /; \
+    chmod +x /usr/bin/prod-entrypoint.sh /usr/bin/dumb-init; \
+    rm -f /tmp/${TAR}
+
+WORKDIR /usr/app/packages/backend
+EXPOSE 8080
+ENTRYPOINT ["dumb-init", "--", "/usr/bin/prod-entrypoint.sh"]
+CMD ["node", "dist/index.js"]

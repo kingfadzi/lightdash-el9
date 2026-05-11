@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+
+dist/
+vendor/lightdash-runtime-*.tar.gz
+
+.claude/
+.DS_Store
+*.log

@@ -1,0 +1,12 @@
+# Keep the build context small.
+.git
+.gitignore
+*.md
+.env
+.env.*
+build/
+dist/
+!Dockerfile
+!Dockerfile.runtime
+node_modules
+.DS_Store

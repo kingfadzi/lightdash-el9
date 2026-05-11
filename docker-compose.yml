@@ -1,0 +1,21 @@
+services:
+  lightdash:
+    build:
+      context: .
+      dockerfile: Dockerfile.runtime
+      args:
+        RUNTIME_BASE_IMAGE: ${RUNTIME_BASE_IMAGE:?RUNTIME_BASE_IMAGE is required in .env}
+        LIGHTDASH_VERSION: ${LIGHTDASH_VERSION:?LIGHTDASH_VERSION is required in .env}
+        RELEASE_BASE_URL: ${RELEASE_BASE_URL:-https://github.com/kingfadzi/lightdash-el9/releases/download}
+        HTTP_PROXY: ${HTTP_PROXY-}
+        HTTPS_PROXY: ${HTTPS_PROXY-}
+        NO_PROXY: ${NO_PROXY-}
+    image: local/lightdash:${LIGHTDASH_VERSION}-el9
+    ports:
+      - "8080:8080"
+    env_file: .env
+    # Lets the container reach a Postgres on the Docker host via
+    # PGHOST=host.docker.internal. Harmless if you point at a remote DB.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
